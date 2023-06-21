@@ -5,7 +5,7 @@ This is the code for the AirGradient DIY PRO Air Quality Sensor with an ESP8266 
 
 It is a high quality sensor showing PM2.5, CO2, Temperature and Humidity on a small display and can send data over Wifi.
 
-Build Instructions: https://www.airgradient.com/open-airgradient/instructions/diy-pro/
+Build Instructions: https://www.airgradient.com/open-airgradient/instructions/diy-pro-v37/
 
 Kits (including a pre-soldered version) are available: https://www.airgradient.com/open-airgradient/kits/
 
@@ -23,7 +23,7 @@ If you have any questions please visit our forum at https://forum.airgradient.co
 If you are a school or university contact us for a free trial on the AirGradient platform.
 https://www.airgradient.com/
 
-License: CC BY-NC 4.0 Attribution-NonCommercial 4.0 International
+CC BY-SA 4.0 Attribution-ShareAlike 4.0 International License
 
 */
 
@@ -54,31 +54,31 @@ NOxGasIndexAlgorithm nox_algorithm;
 uint16_t conditioning_s = 10;
 
 // for persistent saving and loading
-int addr = 0;
+int addr = 4;
 byte value;
 
 // Display bottom right
-//U8G2_SH1106_128X64_NONAME_F_HW_I2C u8g2(U8G2_R0, /* reset=*/ U8X8_PIN_NONE);
+U8G2_SH1106_128X64_NONAME_F_HW_I2C u8g2(U8G2_R0, /* reset=*/ U8X8_PIN_NONE);
 
 // Replace above if you have display on top left
-U8G2_SH1106_128X64_NONAME_F_HW_I2C u8g2(U8G2_R2, /* reset=*/ U8X8_PIN_NONE);
+//U8G2_SH1106_128X64_NONAME_F_HW_I2C u8g2(U8G2_R2, /* reset=*/ U8X8_PIN_NONE);
 
 
 // CONFIGURATION START
 
 // Added by Themi
 // Set to true if you'd like to report to an airgradient endpoint
-boolean doReport = false;
+boolean doReport = true;
 // Http port number
 const int port = 8080;
 // Prometheus device id
-const String deviceId = "AirGradientThemi";
+const String deviceId = "AirGradient1";
 
 //set to the endpoint you would like to use
 String APIROOT = "http://hw.airgradient.com/";
 
 // set to true to switch from Celcius to Fahrenheit
-boolean inF = true;
+boolean inF = false;
 
 // PM2.5 in US AQI (default ug/m3)
 boolean inUSAQI = false;
@@ -86,7 +86,7 @@ boolean inUSAQI = false;
 // Display Position
 boolean displayTop = true;
 
-// set to true if you want to connect to wifi. You have 60 seconds to connect. Then it will go into an offline mode.
+// set to true if you want to connect to wifi. You have 90 seconds to connect. Then it will go into an offline mode.
 boolean connectWIFI=true;
 
 // CONFIGURATION END
@@ -111,16 +111,20 @@ const int co2Interval = 5000;
 unsigned long previousCo2 = 0;
 int Co2 = 0;
 
-const int pm25Interval = 5000;
+//const int pm25Interval = 5000;
+const int pm25Interval = 45000;
+const int pm25SleepIntvl = 150000;
 unsigned long previousPm25 = 0;
+//unsigned long previousSleepPm25 = 0;
 int pm25 = 0;
+boolean pm25sleep = false;
 
 const int tempHumInterval = 2500;
 unsigned long previousTempHum = 0;
 float temp = 0;
 int hum = 0;
 
-int buttonConfig=0;
+int buttonConfig=4;
 int lastState = LOW;
 int currentState;
 unsigned long pressedTime  = 0;
@@ -155,7 +159,7 @@ void setup() {
      connectToWifi();
   }
 
-  updateOLED2("Warming up the", "sensors.", "");
+  updateOLED2("Warming Up", "Serial Number:", String(ESP.getChipId(), HEX));
   sgp41.begin(Wire);
   ag.CO2_Init();
   ag.PMS_Init();
@@ -164,6 +168,7 @@ void setup() {
   // Added by Themi
   server.on("/metrics", HandleMetrics);
   server.on("/metricsjson", HandleJsonMetrics);
+  server.on("/", HandleIndexHTML);
   server.onNotFound(HandleNotFound);
   server.begin();
 }
@@ -173,7 +178,7 @@ void HandleMetrics() {
   String message = "";
   message += GetPrometheusString("pm02 Particulate Matter PM2.5 value", "pm02 gauge", "pm02",  "µg/m³", String(pm25) );
   message += GetPrometheusString("rco2 CO2 value, in ppm", "rco2 gauge", "rco2", "ppm", String(Co2) );
-  message += GetPrometheusString("Temperature, in degrees Fahrenheit", "temp gauge", "temp", "°F", String((temp* 9 / 5) + 32) );
+  message += GetPrometheusString("Temperature, in degrees Celcius", "temp gauge", "temp", "°C", String(temp) );
   message += GetPrometheusString("rhum Relative humidity, in percent", "rhum gauge", "rhum", "%", String(hum) );
   message += GetPrometheusString("TVOC index value", "tvoc gauge", "tvoc", "index", String(TVOC) );
   message += GetPrometheusString("NOX index value", "nox gauge", "nox", "index", String(NOX) );
@@ -181,8 +186,19 @@ void HandleMetrics() {
 }
 
 void HandleJsonMetrics() {
-  String message = "{\"pm02\":"+ String(pm25) + ",\"rco2\":" + String(Co2) + ",\"temp\":" + String((temp* 9 / 5) + 32) + ",\"rhum\":" + String(hum) + ",\"tvoc\":" + String(TVOC) + ",\"nox\":" + String(NOX) + "}";
+  String message = "{\"pm02\":"+ String(pm25) + ",\"rco2\":" + String(Co2) + ",\"temp\":" + String(temp) + ",\"rhum\":" + String(hum) + ",\"tvoc\":" + String(TVOC) + ",\"nox\":" + String(NOX) + "}";
   server.send(200, "application/json", message);
+}
+
+void HandleIndexHTML() {
+  String message = "<!doctype html>";
+  message += "<title>CO2-Monitor</title>";
+  message += "<section class=\"content\">";
+  message += "  <h1 style=\"font-size: 24.47px\">Welcome to CO2-Monitor</h1>";
+  message += "  <p>I'm a C++ script to received sensor data from the CO2-Monitor and make it available via HTTP</p>";
+  message += "  <p>For prometheus metrics, see <a href=\"/metrics\">/metrics</a></p>";
+  message += "  <p>For the raw JSON data try <a href=\"/metricsjson\">/metricsjson</a></p>";
+  server.send(200, "text/html", message);
 }
 
 // Added by Themi
@@ -208,12 +224,14 @@ void loop() {
   updateTVOC();
   updateOLED();
   updateCo2();
+  //
+  sleepPm25();
   updatePm25();
   updateTempHum();
   // Added by Themi
   if (doReport) {
-    sendToServer();
-  }
+  sendToServer();
+}
   server.handleClient();
 }
 
@@ -312,6 +330,9 @@ void setConfig() {
        inF = true;
       inUSAQI = true;
   }
+
+
+
   // to do
   // if (buttonConfig == 8) {
   //  updateOLED2("CO2", "Manual", "Calibration");
@@ -361,12 +382,29 @@ void updateCo2()
     }
 }
 
+void sleepPm25()
+{
+    if (currentMillis - previousPm25 >= pm25SleepIntvl && pm25sleep) {
+// This will not work because it is true also 
+//      previousSleepPm25 = currentMillis;
+      ag.wakeUp();
+      pm25sleep = false;
+    }
+}
+
 void updatePm25()
 {
-    if (currentMillis - previousPm25 >= pm25Interval) {
-      previousPm25 += pm25Interval;
+    if (currentMillis - previousPm25 >= pm25SleepIntvl + pm25Interval) {
+      previousPm25 = currentMillis;
+//    if (currentMillis - previousPm25 >= pm25Interval) {
+//      previousPm25 = currentMillis;
       pm25 = ag.getPM2_Raw();
-      Serial.println(String(pm25));
+      if (pm25 >= 0) {
+        Serial.println(String(pm25));
+      }
+      delay(1000);
+      pm25sleep = true;
+      ag.sleep();
     }
 }
 
@@ -454,28 +492,25 @@ void sendToServer() {
    WiFiManager wifiManager;
    //WiFi.disconnect(); //to delete previous saved hotspot
    String HOTSPOT = "AG-" + String(ESP.getChipId(), HEX);
-   updateOLED2("60s to connect", "to Wifi Hotspot", HOTSPOT);
-   wifiManager.setTimeout(60);
+   updateOLED2("90s to connect", "to Wifi Hotspot", HOTSPOT);
+   wifiManager.setTimeout(90);
 
 
-   WiFiManagerParameter custom_text("<p>This is just a text paragraph</p>");
-   wifiManager.addParameter(&custom_text);
-
-   WiFiManagerParameter parameter("parameterId", "Parameter Label", "default value", 40);
-   wifiManager.addParameter(&parameter);
 
 
-   Serial.println("Parameter 1:");
-   Serial.println(parameter.getValue());
+
+
+
+
+
+
+
 
    if (!wifiManager.autoConnect((const char * ) HOTSPOT.c_str())) {
      updateOLED2("booting into", "offline mode", "");
      Serial.println("failed to connect and hit timeout");
      delay(6000);
    }
-
-   Serial.println("Parameter 2:");
-   Serial.println(parameter.getValue());
 
 }
 

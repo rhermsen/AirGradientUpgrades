@@ -117,6 +117,8 @@ const int pm25SleepIntvl = 150000;
 unsigned long previousPm25 = 0;
 //unsigned long previousSleepPm25 = 0;
 int pm25 = 0;
+int pm25Old = 0;
+int pm25Failed = 0;
 boolean pm25sleep = false;
 
 const int tempHumInterval = 2500;
@@ -398,10 +400,13 @@ void updatePm25()
       previousPm25 = currentMillis;
 //    if (currentMillis - previousPm25 >= pm25Interval) {
 //      previousPm25 = currentMillis;
-      pm25 = ag.getPM2_Raw();
-      if (pm25 >= 0) {
-        Serial.println(String(pm25));
+      pm25Old = ag.getPM2_Raw();
+      if (pm25Old >= 0) {
+        pm25 = pm25Old;
+      } else {
+        pm25Failed++;
       }
+      Serial.println(String(pm25));
       delay(1000);
       pm25sleep = true;
       ag.sleep();

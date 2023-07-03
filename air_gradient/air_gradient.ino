@@ -184,7 +184,7 @@ void HandleMetrics() {
   message += GetPrometheusString("rhum Relative humidity, in percent", "rhum gauge", "rhum", "%", String(hum) );
   message += GetPrometheusString("TVOC index value", "tvoc gauge", "tvoc", "index", String(TVOC) );
   message += GetPrometheusString("NOX index value", "nox gauge", "nox", "index", String(NOX) );
-  message += GetPrometheusString("PM2.5 Read failed count", "rfail count", "rfail", "count", String(pm25Failed) );
+  message += GetPrometheusString("PM2.5 Read failed count", "rfail counter", "rfail", "count", String(pm25Failed) );
   server.send(200, "text/plain", message);
 }
 
